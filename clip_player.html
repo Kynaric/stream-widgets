@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Clip Player</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: transparent;
+    }
+    iframe {
+      width: 1920px;
+      height: 1080px;
+      border: none;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <iframe id="player" allowfullscreen scrolling="no"></iframe>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const slug   = params.get('clipId');
+
+    if (slug) {
+      // WICHTIG: parent muss zur Domain passen von der diese Datei geladen wird
+      // Für GitHub Pages: parent=DEIN-NAME.github.io
+      // Für eigene Domain: parent=deine-domain.com
+      // Für OBS lokal (Option B): parent=localhost
+      const parent = window.location.hostname || 'localhost';
+
+      document.getElementById('player').src =
+        'https://clips.twitch.tv/embed?clip=' + slug +
+        '&parent=' + parent +
+        '&autoplay=true&muted=false';
+    }
+  </script>
+</body>
+</html>
