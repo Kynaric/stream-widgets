@@ -1,53 +1,153 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8" />
-  <title>Clip Player</title>
+  <meta charset="UTF-8">
+  <title>Kynaric Clip Player</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
-      width: 1920px;
-      height: 1080px;
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: black;
       overflow: hidden;
-      background: transparent;
     }
-    iframe {
-      width: 1920px;
-      height: 1080px;
-      border: none;
-      display: block;
+    #clipplayer {
+      width: 100%;
+      height: 100%;
+      background-color: black;
+      opacity: 0;
+      will-change: opacity;
+      transform: translateZ(0);
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+    }
+    #clipplayer.fade-in {
+      opacity: 1;
+      transition: opacity 1s ease-in-out;
+    }
+    #clipplayer.fade-out {
+      opacity: 0;
+      transition: opacity 1s ease-in-out;
     }
   </style>
 </head>
 <body>
-  <iframe id="player" allowfullscreen scrolling="no"></iframe>
+  <video id="clipplayer" playsinline webkit-playsinline preload="metadata" muted></video>
+
   <script>
-    const params = new URLSearchParams(window.location.search);
-    const slug   = params.get('clipId');
-    const parent = window.location.hostname || 'localhost';
+    (async function () {
+      function getQueryParam(name) {
+        return new URLSearchParams(window.location.search).get(name);
+      }
 
-    if (slug) {
-      const frame = document.getElementById('player');
-      frame.src =
-        'https://clips.twitch.tv/embed?clip=' + slug +
-        '&parent=' + parent +
-        '&autoplay=true&muted=false';
+      const clipId = getQueryParam("clipId");
+      if (!clipId) {
+        document.body.innerHTML = '<p>Fehler: "clipId" Parameter fehlt.</p>';
+        return;
+      }
 
-      // Age-Gate Button automatisch klicken sobald er erscheint
-      const interval = setInterval(() => {
-        try {
-          const doc = frame.contentDocument || frame.contentWindow.document;
-          // Twitch Age-Gate Button suchen und klicken
-          const btn = doc.querySelector('button[data-a-target="player-overlay-mature-accept"]');
-          if (btn) {
-            btn.click();
-            clearInterval(interval);
+      // Twitch GQL API - direkter MP4 Link ohne iframe/Age-Gate
+      const endpoint = "https://gql.twitch.tv/gql";
+      const clientId = "kimne78kx3ncx6brgo4mv6wki5h1ko";
+      const query = {
+        operationName: "VideoAccessToken_Clip",
+        variables: { slug: clipId },
+        query: `query VideoAccessToken_Clip($slug: ID!) {
+          clip(slug: $slug) {
+            playbackAccessToken(params: {platform:"web",playerType:"clips-embed-rechat"}) {
+              signature value
+            }
+            videoQualities { frameRate quality sourceURL }
           }
-        } catch(e) {
-          // Cross-origin blockiert direkten Zugriff - anderer Ansatz nötig
-        }
-      }, 500);
-    }
+        }`
+      };
+
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "text/plain;charset=UTF-8",
+            "Client-ID": clientId
+          },
+          body: JSON.stringify(query)
+        });
+
+        if (!response.ok) throw new Error("API Fehler: " + response.status);
+
+        const result = await response.json();
+        const clipData = result?.data?.clip;
+        if (!clipData) throw new Error("Clip nicht gefunden.");
+
+        const videoQualities = clipData.videoQualities;
+        if (!videoQualities?.length) throw new Error("Keine Videoqualitaeten verfuegbar.");
+
+        // Beste Qualitaet waehlen (erster Eintrag = hoechste)
+        const selectedQuality = videoQualities[0];
+        const clipSource = selectedQuality.sourceURL;
+        const clipSig    = clipData.playbackAccessToken.signature;
+        const clipToken  = clipData.playbackAccessToken.value;
+        const videoUrl   = clipSource + "?sig=" + clipSig + "&token=" + encodeURIComponent(clipToken);
+
+        const video = document.getElementById("clipplayer");
+        video.setAttribute('disablePictureInPicture', '');
+        video.setAttribute('disableRemotePlayback', '');
+        video.src     = videoUrl;
+        video.preload = 'metadata';
+        video.load();
+
+        let hasStarted = false;
+        let hasEnded   = false;
+
+        video.addEventListener("canplaythrough", () => {
+          if (!hasStarted) {
+            hasStarted = true;
+            video.muted = false;
+            video.classList.add('fade-in');
+            video.play().catch(() => {
+              video.muted = true;
+              video.play();
+            });
+          }
+        }, { once: true });
+
+        // Stall-Erkennung
+        let lastTime   = 0;
+        let stallCount = 0;
+        let checkInterval = setInterval(() => {
+          if (hasEnded || video.paused || video.ended) {
+            clearInterval(checkInterval);
+            return;
+          }
+          const currentTime = video.currentTime;
+          if (currentTime === lastTime && hasStarted) {
+            stallCount++;
+            if (stallCount > 3) { video.play().catch(() => {}); stallCount = 0; }
+          } else {
+            stallCount = 0;
+          }
+          lastTime = currentTime;
+        }, 500);
+
+        video.addEventListener("suspend", () => { if (!hasEnded && hasStarted) video.play(); });
+        video.addEventListener("stalled",  () => { if (!hasEnded && hasStarted) video.play(); });
+
+        video.addEventListener("ended", async () => {
+          if (hasEnded) return;
+          hasEnded = true;
+          clearInterval(checkInterval);
+          video.classList.remove('fade-in');
+          video.classList.add('fade-out');
+          await new Promise(r => setTimeout(r, 1050));
+          video.pause();
+          video.removeAttribute('src');
+          video.load();
+        });
+
+      } catch (err) {
+        document.body.innerHTML = `<p style="color:white;padding:20px;">Fehler: ${err.message}</p>`;
+      }
+    })();
   </script>
 </body>
 </html>
