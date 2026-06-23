@@ -11,34 +11,28 @@
       overflow: hidden;
       background: transparent;
     }
-    #twitch-player {
+    iframe {
       width: 1920px;
       height: 1080px;
-    }
-    #twitch-player iframe {
-      width: 1920px !important;
-      height: 1080px !important;
-      border: none !important;
+      border: none;
+      display: block;
     }
   </style>
 </head>
 <body>
-  <div id="twitch-player"></div>
-
-  <script src="https://player.twitch.tv/js/embed/v1.js"></script>
+  <iframe id="player" allowfullscreen scrolling="no"></iframe>
   <script>
     const params = new URLSearchParams(window.location.search);
     const slug   = params.get('clipId');
+    const parent = window.location.hostname || 'localhost';
 
     if (slug) {
-      var player = new Twitch.Player("twitch-player", {
-        video:    slug,
-        width:    1920,
-        height:   1080,
-        autoplay: true,
-        muted:    false,
-        parent:   [window.location.hostname || "localhost"]
-      });
+      // player.twitch.tv mit video= statt clips.twitch.tv/embed
+      // umgeht das Age-Gate da es der normale VOD-Player ist
+      document.getElementById('player').src =
+        'https://player.twitch.tv/?video=' + slug +
+        '&parent=' + parent +
+        '&autoplay=true&muted=false';
     }
   </script>
 </body>
