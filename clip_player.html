@@ -27,12 +27,26 @@
     const parent = window.location.hostname || 'localhost';
 
     if (slug) {
-      // player.twitch.tv mit video= statt clips.twitch.tv/embed
-      // umgeht das Age-Gate da es der normale VOD-Player ist
-      document.getElementById('player').src =
-        'https://player.twitch.tv/?video=' + slug +
+      const frame = document.getElementById('player');
+      frame.src =
+        'https://clips.twitch.tv/embed?clip=' + slug +
         '&parent=' + parent +
         '&autoplay=true&muted=false';
+
+      // Age-Gate Button automatisch klicken sobald er erscheint
+      const interval = setInterval(() => {
+        try {
+          const doc = frame.contentDocument || frame.contentWindow.document;
+          // Twitch Age-Gate Button suchen und klicken
+          const btn = doc.querySelector('button[data-a-target="player-overlay-mature-accept"]');
+          if (btn) {
+            btn.click();
+            clearInterval(interval);
+          }
+        } catch(e) {
+          // Cross-origin blockiert direkten Zugriff - anderer Ansatz nötig
+        }
+      }, 500);
     }
   </script>
 </body>
